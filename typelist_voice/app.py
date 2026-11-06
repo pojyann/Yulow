@@ -4,6 +4,7 @@ import queue
 import sys
 import tempfile
 import threading
+import webbrowser
 from pathlib import Path
 import tkinter as tk
 import tkinter.font as tkfont
@@ -12,7 +13,12 @@ import winreg
 
 import numpy as np
 
-from .grammar import GrammarServiceUnavailable, correct_with_ollama, polish_punctuation
+from .grammar import (
+    GrammarServiceUnavailable,
+    correct_with_ollama,
+    ollama_is_ready,
+    polish_punctuation,
+)
 from .settings import Settings
 from .sounds import play
 from .storage import Storage
@@ -66,6 +72,7 @@ class App:
         self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.bind("<Unmap>", self._on_unmap)
         self.root.after(50, self._poll_events)
+        self.root.after(1200, self._offer_grammar_setup)
 
     def _on_unmap(self, event: tk.Event) -> None:
         if event.widget is self.root and self.root.state() == "iconic":
@@ -81,6 +88,57 @@ class App:
         self._hide_overlay()
         self.root.deiconify()
         self.root.lift()
+
+    def _offer_grammar_setup(self) -> None:
+        """Offer, but never force, the optional local AI installation."""
+        if self.settings.grammar_setup_prompted or self.settings.grammar_mode != "local_ai":
+            return
+
+        def check() -> None:
+            ready = ollama_is_ready(self.settings.grammar_model, self.settings.grammar_endpoint)
+            self.events.put(("grammar_setup_check", ready))
+
+        threading.Thread(target=check, daemon=True).start()
+
+    def _show_grammar_setup(self, first_run: bool = False) -> None:
+        if first_run:
+            self.settings.grammar_setup_prompted = True
+            self.settings.save()
+        dialog = tk.Toplevel(self.root)
+        dialog.title(" ")
+        dialog.configure(bg=self.card)
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("500x340")
+        dialog.after(0, lambda: style_title_bar(dialog, self.dark_theme, self.card))
+        tk.Label(dialog, text=self._t("啟用 AI 文法校正", "Enable AI grammar correction"),
+                 bg=self.card, fg=self.fg, font=("Microsoft JhengHei UI", 18, "bold")).pack(
+                     anchor="w", padx=28, pady=(28, 10)
+                 )
+        guide = self._t(
+            "這是可選功能。安裝一次本機 AI 後，中文、英文與日文都能校正文法；不需要 API，也沒有每日額度。\n\n"
+            "1. 安裝 Ollama 桌面版\n"
+            "2. 在 Ollama 裡下載推薦模型：qwen3:4b\n"
+            "3. 回到語落開始使用\n\n"
+            "模型約需數 GB 空間，校正時會使用你的電腦效能。",
+            "This optional feature corrects Chinese, English, and Japanese locally. It needs no API key or daily quota.\n\n"
+            "1. Install the Ollama desktop app\n"
+            "2. Download the recommended model: qwen3:4b\n"
+            "3. Return to Yulow and start using it\n\n"
+            "The model uses several GB of disk space and your computer's processing power."
+        )
+        tk.Label(dialog, text=guide, bg=self.card, fg=self.muted, justify="left", anchor="nw",
+                 wraplength=440, font=("Microsoft JhengHei UI", 10)).pack(
+                     fill="both", expand=True, padx=28
+                 )
+        actions = tk.Frame(dialog, bg=self.card)
+        actions.pack(fill="x", padx=28, pady=(10, 24))
+        RoundedButton(actions, text=self._t("開啟 Ollama 官方下載頁", "Open Ollama download page"),
+                      command=lambda: webbrowser.open("https://ollama.com/download/windows"),
+                      bg=self.accent, width=210, height=40, radius=12).pack(side="left")
+        RoundedButton(actions, text=self._t("稍後再說", "Maybe later"), command=dialog.destroy,
+                      bg=self.border, fg=self.fg, width=110, height=40, radius=12).pack(side="right")
 
     def _show_overlay(self, message: str, color: str, loading: bool = False) -> None:
         if not self.hidden_to_tray:
@@ -382,6 +440,9 @@ class App:
                               "Local AI corrects Chinese, English, and Japanese with no daily quota. Install Ollama, then download qwen3:4b."),
                  bg=self.bg, fg=self.muted, justify="left", wraplength=620,
                  font=("Microsoft JhengHei UI", 9)).pack(anchor="w", padx=4, pady=(2, 0))
+        RoundedButton(window, text=self._t("本機 AI 安裝指南", "Local AI setup guide"),
+                      command=self._show_grammar_setup, bg=self.border, fg=self.fg,
+                      width=172, height=38, radius=11).pack(anchor="w", padx=4, pady=(10, 0))
 
         def save() -> None:
             self.settings.auto_paste = auto.get()
@@ -525,6 +586,9 @@ class App:
                     self._hide_overlay_later(2500)
                 elif kind == "show_main":
                     self._show_main()
+                elif kind == "grammar_setup_check":
+                    if not bool(data):
+                        self._show_grammar_setup(first_run=True)
                 elif kind == "quit":
                     self.close()
         except queue.Empty:

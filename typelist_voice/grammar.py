@@ -65,6 +65,22 @@ def correct_with_ollama(
     return corrected
 
 
+def ollama_is_ready(
+    model: str,
+    endpoint: str = "http://127.0.0.1:11434/api/chat",
+    timeout: int = 2,
+) -> bool:
+    """Return whether Ollama is running and already has the selected model."""
+    tags_endpoint = endpoint.rsplit("/", 1)[0] + "/tags"
+    try:
+        with urlopen(tags_endpoint, timeout=timeout) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        names = {str(item.get("name", "")) for item in data.get("models", [])}
+        return model in names
+    except (URLError, TimeoutError, OSError, ValueError, TypeError):
+        return False
+
+
 def polish_punctuation(text: str, language: str | None) -> str:
     """Safe local cleanup. It never rewrites meaning."""
     cleaned = re.sub(r"\s+([,.!?;:，。！？；：])", r"\1", text.strip())

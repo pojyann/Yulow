@@ -22,6 +22,7 @@ class Settings:
     grammar_mode: str = "local_ai"
     grammar_model: str = "qwen3:4b"
     grammar_endpoint: str = "http://127.0.0.1:11434/api/chat"
+    grammar_setup_prompted: bool = False
     keep_history_days: int = 30
 
     @classmethod

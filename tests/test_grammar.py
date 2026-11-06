@@ -1,7 +1,7 @@
 import json
 
 import typelist_voice.grammar as grammar
-from typelist_voice.grammar import correct_with_ollama, polish_punctuation
+from typelist_voice.grammar import correct_with_ollama, ollama_is_ready, polish_punctuation
 
 
 def test_english_punctuation() -> None:
@@ -40,3 +40,19 @@ def test_local_ai_correction_uses_language_safe_prompt(monkeypatch) -> None:
     assert result == "She goes to school every day."
     assert captured["body"]["model"] == "qwen3:4b"
     assert "Return only the corrected text" in captured["body"]["messages"][0]["content"]
+
+
+def test_ollama_check_requires_the_selected_model(monkeypatch) -> None:
+    class FakeResponse:
+        def read(self) -> bytes:
+            return b'{"models":[{"name":"qwen3:4b"}]}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    monkeypatch.setattr(grammar, "urlopen", lambda *args, **kwargs: FakeResponse())
+    assert ollama_is_ready("qwen3:4b")
+    assert not ollama_is_ready("another-model")
