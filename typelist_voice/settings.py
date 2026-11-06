@@ -19,7 +19,9 @@ class Settings:
     microphone: int | None = None
     interface_language: str = "繁體中文"
     theme: str = "跟隨 Windows"
-    grammar_mode: str = "preview"
+    grammar_mode: str = "local_ai"
+    grammar_model: str = "qwen3:4b"
+    grammar_endpoint: str = "http://127.0.0.1:11434/api/chat"
     keep_history_days: int = 30
 
     @classmethod

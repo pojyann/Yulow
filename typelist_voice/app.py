@@ -12,7 +12,7 @@ import winreg
 
 import numpy as np
 
-from .grammar import polish_punctuation
+from .grammar import GrammarServiceUnavailable, correct_with_ollama, polish_punctuation
 from .settings import Settings
 from .sounds import play
 from .storage import Storage
@@ -363,8 +363,25 @@ class App:
         chooser(self._t("麥克風", "Microphone"), selected_mic, microphone_labels)
         days = tk.StringVar(value=str(self.settings.keep_history_days))
         chooser(self._t("記錄保留天數", "History days"), days, ["7", "30", "90", "365"])
-        tk.Label(window, text=self._t("文法校正功能尚在開發中。", "Grammar correction is in development."),
-                 bg=self.bg, fg=self.muted, font=("Microsoft JhengHei UI", 9)).pack(anchor="w", padx=4, pady=(12, 0))
+        grammar_labels = {
+            "off": self._t("關閉", "Off"),
+            "preview": self._t("僅整理標點", "Punctuation only"),
+            "local_ai": self._t("本機 AI 校正（推薦）", "Local AI correction (recommended)"),
+        }
+        selected_grammar = tk.StringVar(value=grammar_labels.get(self.settings.grammar_mode, grammar_labels["local_ai"]))
+        chooser(self._t("文法校正", "Grammar correction"), selected_grammar, list(grammar_labels.values()))
+        model_row = tk.Frame(window, bg=self.bg)
+        model_row.pack(fill="x", padx=4, pady=7)
+        tk.Label(model_row, text=self._t("AI 模型", "AI model"), bg=self.bg, fg=self.fg, width=13,
+                 anchor="w").pack(side="left")
+        grammar_model = tk.StringVar(value=self.settings.grammar_model)
+        tk.Entry(model_row, textvariable=grammar_model, bg=field, fg=self.fg, insertbackground=self.fg,
+                 relief="flat", font=("Segoe UI", 10)).pack(side="left", fill="x", expand=True, ipady=6)
+        tk.Label(window,
+                 text=self._t("本機 AI 可校正中文、英文與日文，不設每日額度。請先安裝 Ollama，並下載 qwen3:4b 模型。",
+                              "Local AI corrects Chinese, English, and Japanese with no daily quota. Install Ollama, then download qwen3:4b."),
+                 bg=self.bg, fg=self.muted, justify="left", wraplength=620,
+                 font=("Microsoft JhengHei UI", 9)).pack(anchor="w", padx=4, pady=(2, 0))
 
         def save() -> None:
             self.settings.auto_paste = auto.get()
@@ -375,6 +392,10 @@ class App:
                                              if label == selected_mic.get()), None)
             self.settings.interface_language = language.get()
             self.settings.theme = theme.get()
+            self.settings.grammar_mode = next(
+                (key for key, label in grammar_labels.items() if label == selected_grammar.get()), "local_ai"
+            )
+            self.settings.grammar_model = grammar_model.get().strip() or "qwen3:4b"
             if self.settings.hotkey != hotkey.get():
                 self.hook.stop()
                 self.settings.hotkey = hotkey.get()
@@ -465,7 +486,20 @@ class App:
                     text = OpenCC("s2twp").convert(text)
                 except ImportError:
                     pass
-            self.events.put(("recognized", (text, language)))
+            grammar_applied = False
+            grammar_message = ""
+            if self.settings.grammar_mode == "local_ai":
+                self.events.put(("status", self._t("正在用本機 AI 校正文法…", "Correcting grammar locally…")))
+                try:
+                    text = correct_with_ollama(
+                        text, language, self.settings.grammar_model, self.settings.grammar_endpoint
+                    )
+                    grammar_applied = True
+                except GrammarServiceUnavailable:
+                    grammar_message = self._t(
+                        "本機 AI 尚未啟用，已保留標點整理", "Local AI is not ready; punctuation cleanup was kept"
+                    )
+            self.events.put(("recognized", (text, language, grammar_applied, grammar_message)))
         except Exception as exc:
             self.events.put(("error", str(exc)))
         finally:
@@ -481,8 +515,8 @@ class App:
                 elif kind == "status":
                     self.status.set(str(data))
                 elif kind == "recognized":
-                    text, language = data
-                    self._deliver(text, language)
+                    text, language, grammar_applied, grammar_message = data
+                    self._deliver(text, language, grammar_applied, grammar_message)
                 elif kind == "error":
                     self._sound_error()
                     self.preview.set("辨識失敗")
@@ -497,7 +531,8 @@ class App:
             pass
         self.root.after(50, self._poll_events)
 
-    def _deliver(self, text: str, language: str | None) -> None:
+    def _deliver(self, text: str, language: str | None, grammar_applied: bool = False,
+                 grammar_message: str = "") -> None:
         self.last_text = text
         self.last_language = language
         self.storage.add_history(text, language)
@@ -510,11 +545,17 @@ class App:
             self.root.update()
             focus_window(self.target_hwnd)
             paste()
-            self._reset("已輸入到原本的游標位置")
+            self._reset(grammar_message or (
+                self._t("已校正文法並輸入到原本的游標位置", "Grammar corrected and inserted")
+                if grammar_applied else self._t("已輸入到原本的游標位置", "Inserted at the original cursor")
+            ))
         else:
             self.root.clipboard_clear()
             self.root.clipboard_append(text)
-            self._reset("辨識完成，內容已複製")
+            self._reset(grammar_message or (
+                self._t("已校正文法，內容已複製", "Grammar corrected and copied")
+                if grammar_applied else self._t("辨識完成，內容已複製", "Transcription copied")
+            ))
 
     def undo_last(self) -> None:
         if not self.last_text:
