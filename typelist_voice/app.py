@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import webbrowser
+import math
 from pathlib import Path
 import tkinter as tk
 import tkinter.font as tkfont
@@ -55,6 +56,10 @@ class App:
 
         self.status = tk.StringVar(value="按一下右 Alt 開始錄音")
         self.preview = tk.StringVar(value="說話之後，文字會出現在這裡。")
+        self.raw_preview = tk.StringVar(value="—")
+        self.grammar_status = tk.StringVar(value="等待語音辨識")
+        self.grammar_result = tk.StringVar(value="—")
+        self.wave_step = 0
         self._configure_window()
         self._build_ui()
 
@@ -211,8 +216,8 @@ class App:
     def _configure_window(self) -> None:
         self._set_palette()
         self.root.title(" ")
-        self.root.geometry("940x640+40+80")
-        self.root.minsize(760, 520)
+        self.root.geometry("1000x720+40+80")
+        self.root.minsize(820, 600)
         self.root.attributes("-topmost", True)
         self.root.configure(bg=self.bg)
         self.root.after(0, self._style_title_bar)
@@ -313,16 +318,23 @@ class App:
             self._show_list_page(page)
 
     def _show_home(self) -> None:
-        tk.Label(self.content, text=self._t("開口說，文字就到了。", "Speak. Your words appear."),
-                 bg=self.bg, fg=self.fg, font=("Microsoft JhengHei UI", 23, "bold"),
-                 anchor="w").pack(fill="x", pady=(0, 20))
+        headline = tk.Frame(self.content, bg=self.bg)
+        headline.pack(fill="x", pady=(0, 18))
+        tk.Label(headline, text=self._t("開口說，文字就到了。", "Speak. Your words appear."),
+                 bg=self.bg, fg=self.fg, font=("Microsoft JhengHei UI", 25, "bold"),
+                 anchor="w").pack(side="left")
+        self.recording_indicator = tk.Label(
+            headline, text=self._t("●  等待錄音", "●  Ready"), bg=self.card, fg=self.muted,
+            font=("Microsoft JhengHei UI", 10, "bold"), padx=12, pady=7
+        )
+        self.recording_indicator.pack(side="right")
         stats = self.storage.usage_stats()
         metrics = tk.Frame(self.content, bg=self.bg)
         metrics.pack(fill="x", pady=(0, 18))
         for value, label in [
             (stats["today"], self._t("今天口述字數", "Words today")),
             (stats["week"], self._t("本週口述字數", "Words this week")),
-            (stats["today"], self._t("今天少打的字數", "Keystrokes saved today")),
+            (stats["today"], self._t("今天少打字數", "Keystrokes saved today")),
         ]:
             card = tk.Frame(metrics, bg=self.card, highlightbackground=self.border, highlightthickness=1)
             card.pack(side="left", fill="both", expand=True, padx=(0, 10))
@@ -332,18 +344,73 @@ class App:
                      font=("Microsoft JhengHei UI", 10), anchor="w").pack(fill="x", padx=17, pady=(0, 14))
         card = tk.Frame(self.content, bg=self.card, highlightbackground=self.border, highlightthickness=1)
         card.pack(fill="both", expand=True)
-        tk.Label(card, text=self._t("最近一次辨識", "LATEST TRANSCRIPT"), bg=self.card,
-                 fg=self.muted, anchor="w", font=("Microsoft JhengHei UI", 10, "bold")).pack(fill="x", padx=20, pady=(18, 0))
+        transcript_header = tk.Frame(card, bg=self.card)
+        transcript_header.pack(fill="x", padx=20, pady=(18, 0))
+        tk.Label(transcript_header, text=self._t("最近一次辨識", "LATEST TRANSCRIPT"), bg=self.card,
+                 fg=self.muted, anchor="w", font=("Microsoft JhengHei UI", 10, "bold")).pack(side="left")
+        self.transcript_state = tk.Label(transcript_header, text=self._t("準備就緒", "Ready"), bg=self.card,
+                                         fg=self.muted, font=("Microsoft JhengHei UI", 10))
+        self.transcript_state.pack(side="right")
         self.preview_label = tk.Label(card, textvariable=self.preview, bg=self.card, fg=self.fg,
-                                      font=("Microsoft JhengHei UI", 15), wraplength=570,
-                                      justify="left", anchor="nw", padx=20, pady=20)
-        self.preview_label.pack(fill="both", expand=True)
+                                      font=("Microsoft JhengHei UI", 16), wraplength=620,
+                                      justify="left", anchor="nw", padx=20, pady=(14, 8))
+        self.preview_label.pack(fill="x")
+        self.waveform_canvas = tk.Canvas(card, height=42, bg=self.card, highlightthickness=0, borderwidth=0)
+        self.waveform_canvas.pack(fill="x", padx=24, pady=(0, 8))
+        self._animate_home_waveform()
+        grammar_card = tk.Frame(card, bg=self.bg, highlightbackground=self.border, highlightthickness=1)
+        grammar_card.pack(fill="x", padx=20, pady=(2, 10))
+        grammar_header = tk.Frame(grammar_card, bg=self.bg)
+        grammar_header.pack(fill="x", padx=13, pady=(10, 5))
+        tk.Label(grammar_header, text=self._t("AI 文法校正", "AI GRAMMAR CORRECTION"), bg=self.bg,
+                 fg=self.accent, font=("Microsoft JhengHei UI", 10, "bold")).pack(side="left")
+        self.grammar_status_label = tk.Label(grammar_header, textvariable=self.grammar_status, bg=self.bg,
+                                              fg=self.muted, font=("Microsoft JhengHei UI", 9, "bold"))
+        self.grammar_status_label.pack(side="right")
+        self._grammar_line(grammar_card, self._t("原始辨識", "Original"), self.raw_preview, self.muted)
+        self._grammar_line(grammar_card, self._t("校正結果", "Corrected"), self.grammar_result, self.accent)
         actions = tk.Frame(card, bg=self.card)
         actions.pack(fill="x", padx=18, pady=(0, 14))
         for label, command in [(self._t("↶  復原", "↶  Undo"), self.undo_last),
                                (self._t("☆  收藏", "☆  Save phrase"), self.favorite_last)]:
             tk.Button(actions, text=label, command=command, bg=self.card, fg=self.accent,
                       relief="flat", padx=8, pady=6).pack(side="left", padx=(0, 8))
+
+    def _grammar_line(self, parent: tk.Frame, label: str, value: tk.StringVar, color: str) -> None:
+        row = tk.Frame(parent, bg=self.bg)
+        row.pack(fill="x", padx=13, pady=3)
+        tk.Label(row, text=label, bg=self.bg, fg=self.muted, width=8, anchor="w",
+                 font=("Microsoft JhengHei UI", 9)).pack(side="left")
+        tk.Label(row, textvariable=value, bg="#1A2227" if self.dark_theme else "#F0EFEB", fg=color,
+                 anchor="w", justify="left", padx=10, pady=5,
+                 font=("Microsoft JhengHei UI", 10)).pack(side="left", fill="x", expand=True)
+
+    def _animate_home_waveform(self) -> None:
+        canvas = getattr(self, "waveform_canvas", None)
+        if canvas is None or not canvas.winfo_exists():
+            return
+        width = max(canvas.winfo_width(), 420)
+        height = 42
+        canvas.delete("all")
+        bars, gap = 48, 4
+        bar_width = max(2, (width - (bars - 1) * gap) / bars)
+        for index in range(bars):
+            motion = math.sin((index * 0.73) + self.wave_step * 0.32)
+            amplitude = 4 + (abs(motion) * (13 if self.recording else 4))
+            center = height / 2
+            x = index * (bar_width + gap)
+            color = self.accent if self.recording else self.border
+            canvas.create_rectangle(x, center - amplitude, x + bar_width, center + amplitude,
+                                    fill=color, outline=color)
+        self.wave_step += 1
+        self.root.after(100, self._animate_home_waveform)
+
+    def _set_grammar_card(self, source: str, result: str, state: str, success: bool) -> None:
+        self.raw_preview.set(source or "—")
+        self.grammar_result.set(result or "—")
+        self.grammar_status.set(state)
+        if hasattr(self, "grammar_status_label") and self.grammar_status_label.winfo_exists():
+            self.grammar_status_label.configure(fg=self.accent if success else self.muted)
 
     def _show_list_page(self, page: str) -> None:
         is_history = page == "history"
@@ -513,6 +580,11 @@ class App:
         self.mic_button.set_style(self._t("■  停止", "■  Stop"), "#C96859")
         self.status.set("正在聆聽… 再按一下右 Alt 停止")
         self.preview.set("請開始說話")
+        if hasattr(self, "recording_indicator"):
+            self.recording_indicator.configure(text=self._t("●  錄音中", "●  Recording"), fg="#F18C84")
+        if hasattr(self, "transcript_state"):
+            self.transcript_state.configure(text=self._t("正在聆聽", "Listening"), fg=self.accent)
+        self._set_grammar_card("—", "—", self._t("等待語音完成", "Waiting for dictation"), False)
 
     def stop_recording(self) -> None:
         self.recording = False
@@ -528,6 +600,10 @@ class App:
         self._show_overlay(self._t("正在辨識語音…", "Transcribing…"), "#F2D997", loading=True)
         self.mic_button.set_style(self._t("辨識中", "Working"), "#9AA9A3", disabled=True)
         self.status.set("正在辨識中英日語音")
+        if hasattr(self, "recording_indicator"):
+            self.recording_indicator.configure(text=self._t("●  辨識中", "●  Working"), fg="#F2D997")
+        if hasattr(self, "transcript_state"):
+            self.transcript_state.configure(text=self._t("正在辨識", "Transcribing"), fg="#F2D997")
         threading.Thread(target=self._recognize, daemon=True).start()
 
     def _recognize(self) -> None:
@@ -547,6 +623,7 @@ class App:
                     text = OpenCC("s2twp").convert(text)
                 except ImportError:
                     pass
+            source_text = text
             grammar_applied = False
             grammar_message = ""
             if self.settings.grammar_mode == "local_ai":
@@ -560,7 +637,7 @@ class App:
                     grammar_message = self._t(
                         "本機 AI 尚未啟用，已保留標點整理", "Local AI is not ready; punctuation cleanup was kept"
                     )
-            self.events.put(("recognized", (text, language, grammar_applied, grammar_message)))
+            self.events.put(("recognized", (text, language, source_text, grammar_applied, grammar_message)))
         except Exception as exc:
             self.events.put(("error", str(exc)))
         finally:
@@ -576,8 +653,8 @@ class App:
                 elif kind == "status":
                     self.status.set(str(data))
                 elif kind == "recognized":
-                    text, language, grammar_applied, grammar_message = data
-                    self._deliver(text, language, grammar_applied, grammar_message)
+                    text, language, source_text, grammar_applied, grammar_message = data
+                    self._deliver(text, language, source_text, grammar_applied, grammar_message)
                 elif kind == "error":
                     self._sound_error()
                     self.preview.set("辨識失敗")
@@ -595,12 +672,26 @@ class App:
             pass
         self.root.after(50, self._poll_events)
 
-    def _deliver(self, text: str, language: str | None, grammar_applied: bool = False,
+    def _deliver(self, text: str, language: str | None, source_text: str = "", grammar_applied: bool = False,
                  grammar_message: str = "") -> None:
         self.last_text = text
         self.last_language = language
         self.storage.add_history(text, language)
         self.preview.set(text)
+        if hasattr(self, "recording_indicator"):
+            self.recording_indicator.configure(text=self._t("●  已完成", "●  Complete"), fg=self.accent)
+        if hasattr(self, "transcript_state"):
+            self.transcript_state.configure(text=self._t("辨識完成", "Complete"), fg=self.accent)
+        if grammar_applied:
+            self._set_grammar_card(source_text, text, self._t("✓ AI 文法校正完成", "✓ AI correction complete"), True)
+        elif self.settings.grammar_mode == "local_ai":
+            self._set_grammar_card(source_text, text,
+                                   grammar_message or self._t("本機 AI 無法完成校正", "Local AI could not correct"),
+                                   False)
+        elif self.settings.grammar_mode == "preview":
+            self._set_grammar_card(source_text, text, self._t("已整理標點", "Punctuation cleaned"), False)
+        else:
+            self._set_grammar_card(source_text, text, self._t("文法校正未啟用", "Grammar correction is off"), False)
         self._show_overlay(text, "#8DDFC1")
         self._hide_overlay_later(3000)
         if self.settings.auto_paste:
