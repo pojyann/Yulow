@@ -30,6 +30,7 @@ from .widgets import RoundedButton
 
 
 APP_NAME = "Yulow｜語落"
+APP_VERSION = "v0.2.3"
 SAMPLE_RATE = 16000
 
 
@@ -256,6 +257,8 @@ class App:
                  font=("Segoe UI", 21, "bold"), anchor="w").pack(fill="x", padx=22, pady=(25, 4))
         tk.Label(sidebar, text="語落 · Voice to text", bg=self.card, fg=self.muted,
                  font=("Microsoft JhengHei UI", 9), anchor="w").pack(fill="x", padx=22, pady=(0, 22))
+        tk.Label(sidebar, text=f"版本 {APP_VERSION}", bg=self.card, fg=self.muted,
+                 font=("Segoe UI", 9), anchor="w").pack(fill="x", padx=22, pady=(0, 12))
         self.nav_buttons = {}
         for page, zh, en, icon in [
             ("home", "首頁", "Home", "⌂"),
@@ -451,6 +454,8 @@ class App:
                   background=[("readonly", field)], foreground=[("readonly", self.fg)])
         tk.Label(window, text=self._t("設定", "Settings"), bg=self.bg, fg=self.fg,
                  font=("Microsoft JhengHei UI", 23, "bold")).pack(anchor="w", pady=(0, 18))
+        tk.Label(window, text=self._t(f"目前版本：{APP_VERSION}", f"Version: {APP_VERSION}"),
+                 bg=self.bg, fg=self.muted, font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 12))
         auto = tk.BooleanVar(value=self.settings.auto_paste)
         traditional = tk.BooleanVar(value=self.settings.traditional_chinese)
         sounds = tk.BooleanVar(value=self.settings.sound_cues)
