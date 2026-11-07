@@ -405,12 +405,16 @@ class App:
         self.wave_step += 1
         self.root.after(100, self._animate_home_waveform)
 
-    def _set_grammar_card(self, source: str, result: str, state: str, success: bool) -> None:
+    def _set_grammar_card(
+        self, source: str, result: str, state: str, success: bool, unavailable: bool = False
+    ) -> None:
         self.raw_preview.set(source or "—")
         self.grammar_result.set(result or "—")
         self.grammar_status.set(state)
         if hasattr(self, "grammar_status_label") and self.grammar_status_label.winfo_exists():
-            self.grammar_status_label.configure(fg=self.accent if success else self.muted)
+            self.grammar_status_label.configure(
+                fg=self.accent if success else ("#F18C84" if unavailable else self.muted)
+            )
 
     def _show_list_page(self, page: str) -> None:
         is_history = page == "history"
@@ -685,11 +689,20 @@ class App:
         if grammar_applied:
             self._set_grammar_card(source_text, text, self._t("✓ AI 文法校正完成", "✓ AI correction complete"), True)
         elif self.settings.grammar_mode == "local_ai":
-            self._set_grammar_card(source_text, text,
-                                   grammar_message or self._t("本機 AI 無法完成校正", "Local AI could not correct"),
-                                   False)
+            self._set_grammar_card(
+                source_text,
+                self._t("無法校正（已保留標點整理）", "Could not correct (punctuation kept)"),
+                grammar_message or self._t("本機 AI 無法完成校正", "Local AI could not correct"),
+                False,
+                unavailable=True,
+            )
         elif self.settings.grammar_mode == "preview":
-            self._set_grammar_card(source_text, text, self._t("已整理標點", "Punctuation cleaned"), False)
+            self._set_grammar_card(
+                source_text,
+                text,
+                self._t("AI 文法校正未啟用，僅整理標點", "AI grammar is off; punctuation cleaned"),
+                False,
+            )
         else:
             self._set_grammar_card(source_text, text, self._t("文法校正未啟用", "Grammar correction is off"), False)
         self._show_overlay(text, "#8DDFC1")
