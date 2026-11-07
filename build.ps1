@@ -19,5 +19,5 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 
 Copy-Item README.md "dist\Yulow\使用說明.md" -Force
 New-Item -ItemType Directory -Force outputs | Out-Null
-Compress-Archive -Path "dist\Yulow\*" -DestinationPath "outputs\Yulow-Windows-v0.2.0.zip" -Force
-Write-Host "完成：outputs\Yulow-Windows-v0.2.0.zip"
+Compress-Archive -Path "dist\Yulow\*" -DestinationPath "outputs\Yulow-Windows-v0.2.1.zip" -Force
+Write-Host "完成：outputs\Yulow-Windows-v0.2.1.zip"

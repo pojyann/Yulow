@@ -353,8 +353,8 @@ class App:
         self.transcript_state.pack(side="right")
         self.preview_label = tk.Label(card, textvariable=self.preview, bg=self.card, fg=self.fg,
                                       font=("Microsoft JhengHei UI", 16), wraplength=620,
-                                      justify="left", anchor="nw", padx=20, pady=(14, 8))
-        self.preview_label.pack(fill="x")
+                                      justify="left", anchor="nw", padx=20, pady=11)
+        self.preview_label.pack(fill="x", pady=(3, 3))
         self.waveform_canvas = tk.Canvas(card, height=42, bg=self.card, highlightthickness=0, borderwidth=0)
         self.waveform_canvas.pack(fill="x", padx=24, pady=(0, 8))
         self._animate_home_waveform()
