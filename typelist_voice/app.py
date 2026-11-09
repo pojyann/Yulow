@@ -30,7 +30,7 @@ from .widgets import RoundedButton
 
 
 APP_NAME = "Yulow｜語落"
-APP_VERSION = "v0.2.3"
+APP_VERSION = "v0.2.10"
 SAMPLE_RATE = 16000
 
 
@@ -217,11 +217,19 @@ class App:
     def _configure_window(self) -> None:
         self._set_palette()
         self.root.title(" ")
+        icon_path = self._resource_path("assets/yulow-bunny-hole.ico")
+        if icon_path.exists():
+            self.root.iconbitmap(default=str(icon_path))
         self.root.geometry("1000x720+40+80")
         self.root.minsize(820, 600)
         self.root.attributes("-topmost", True)
         self.root.configure(bg=self.bg)
         self.root.after(0, self._style_title_bar)
+
+    @staticmethod
+    def _resource_path(relative: str) -> Path:
+        root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+        return root / relative
 
     def _style_title_bar(self) -> None:
         try:
@@ -238,7 +246,7 @@ class App:
             except OSError:
                 dark = False
         self.bg, self.card, self.fg, self.muted, self.border, self.accent = (
-            ("#14191D", "#20272C", "#F4F7F6", "#ADB9B7", "#344149", "#47A98F")
+            ("#11181C", "#192329", "#F7FAF9", "#AEBBB8", "#35454C", "#64E8B6")
             if dark else
             ("#F5F3EF", "#FFFFFF", "#17202B", "#687681", "#E5E3DE", "#287967")
         )
@@ -250,15 +258,27 @@ class App:
     def _build_ui(self) -> None:
         shell = tk.Frame(self.root, bg=self.bg)
         shell.pack(fill="both", expand=True)
-        sidebar = tk.Frame(shell, bg=self.card, width=200, highlightbackground=self.border, highlightthickness=1)
+        sidebar = tk.Frame(shell, bg=self.card, width=224, highlightbackground=self.border, highlightthickness=1)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
-        tk.Label(sidebar, text="Yulow", bg=self.card, fg=self.fg,
-                 font=("Segoe UI", 21, "bold"), anchor="w").pack(fill="x", padx=22, pady=(25, 4))
-        tk.Label(sidebar, text="語落 · Voice to text", bg=self.card, fg=self.muted,
-                 font=("Microsoft JhengHei UI", 9), anchor="w").pack(fill="x", padx=22, pady=(0, 22))
-        tk.Label(sidebar, text=f"版本 {APP_VERSION}", bg=self.card, fg=self.muted,
-                 font=("Segoe UI", 9), anchor="w").pack(fill="x", padx=22, pady=(0, 12))
+        brand = tk.Frame(sidebar, bg=self.card)
+        brand.pack(fill="x", padx=16, pady=(25, 11))
+        try:
+            from PIL import Image, ImageTk
+            bunny = Image.open(self._resource_path("assets/yulow-bunny-hole.png")).convert("RGBA")
+            bunny.thumbnail((100, 100), Image.Resampling.LANCZOS)
+            self.sidebar_bunny_image = ImageTk.PhotoImage(bunny)
+            tk.Label(brand, image=self.sidebar_bunny_image, bg=self.card).pack(pady=(0, 7))
+        except Exception:
+            tk.Label(brand, text="◕", bg=self.card, fg=self.accent,
+                     font=("Segoe UI", 42, "bold")).pack(pady=(0, 7))
+        tk.Label(brand, text="Yulow", bg=self.card, fg=self.fg,
+                 font=("Segoe UI", 23, "bold")).pack()
+        tk.Label(brand, text="語落 · Voice to text", bg=self.card, fg=self.muted,
+                 font=("Microsoft JhengHei UI", 9)).pack(pady=(1, 0))
+        version = tk.Label(sidebar, text=f"版本 {APP_VERSION}", bg="#2A343A" if self.dark_theme else self.border,
+                           fg=self.muted, font=("Segoe UI", 9), padx=9, pady=4)
+        version.pack(pady=(0, 15))
         self.nav_buttons = {}
         for page, zh, en, icon in [
             ("home", "首頁", "Home", "⌂"),
@@ -267,14 +287,14 @@ class App:
         ]:
             button = RoundedButton(sidebar, text=f"{icon}   {self._t(zh, en)}",
                                    command=lambda p=page: self._show_page(p), bg=self.card,
-                                   fg=self.fg, width=174, height=45, radius=10,
+                                   fg=self.fg, width=192, height=47, radius=12,
                                    align="left", font=("Microsoft JhengHei UI", 11))
             button.pack(fill="x", padx=12, pady=2)
             self.nav_buttons[page] = button
         tk.Frame(sidebar, bg=self.card).pack(fill="both", expand=True)
         settings_button = RoundedButton(sidebar, text=self._t("⚙   設定", "⚙   Settings"),
                                         command=self.show_settings, bg=self.card, fg=self.fg,
-                                        width=174, height=45, radius=10, align="left",
+                                        width=192, height=47, radius=12, align="left",
                                         font=("Microsoft JhengHei UI", 11))
         settings_button.pack(fill="x", padx=12, pady=(0, 20))
         self.nav_buttons["settings"] = settings_button
@@ -282,16 +302,17 @@ class App:
         right = tk.Frame(shell, bg=self.bg)
         right.pack(side="left", fill="both", expand=True)
         self.content = tk.Frame(right, bg=self.bg)
-        self.content.pack(fill="both", expand=True, padx=30, pady=(25, 8))
+        self.content.pack(fill="both", expand=True, padx=34, pady=(28, 8))
         footer = tk.Frame(right, bg=self.bg)
-        footer.pack(fill="x", padx=30, pady=(0, 22))
+        footer.pack(fill="x", padx=34, pady=(0, 24))
         self.footer = footer
         self.settings_save_button = None
         tk.Label(footer, textvariable=self.status, bg=self.bg, fg=self.accent,
                  anchor="w", font=("Microsoft JhengHei UI", 10)).pack(side="left", fill="x", expand=True)
         self.mic_button = RoundedButton(footer, text=self._t("●  錄音", "●  Record"),
-                                        command=self.toggle, bg=self.accent,
-                                        width=112, height=44, radius=13)
+                                        command=self.toggle, bg=self.accent, fg="#102019",
+                                        width=126, height=46, radius=15,
+                                        font=("Microsoft JhengHei UI", 12, "bold"))
         self.mic_button.pack(side="right")
         self._show_page("home")
         self.root.bind("<Configure>", self._resize_preview)
@@ -322,9 +343,9 @@ class App:
 
     def _show_home(self) -> None:
         headline = tk.Frame(self.content, bg=self.bg)
-        headline.pack(fill="x", pady=(0, 18))
+        headline.pack(fill="x", pady=(0, 20))
         tk.Label(headline, text=self._t("開口說，文字就到了。", "Speak. Your words appear."),
-                 bg=self.bg, fg=self.fg, font=("Microsoft JhengHei UI", 25, "bold"),
+                 bg=self.bg, fg=self.fg, font=("Microsoft JhengHei UI", 28, "bold"),
                  anchor="w").pack(side="left")
         self.recording_indicator = tk.Label(
             headline, text=self._t("●  等待錄音", "●  Ready"), bg=self.card, fg=self.muted,
@@ -333,22 +354,25 @@ class App:
         self.recording_indicator.pack(side="right")
         stats = self.storage.usage_stats()
         metrics = tk.Frame(self.content, bg=self.bg)
-        metrics.pack(fill="x", pady=(0, 18))
-        for value, label in [
-            (stats["today"], self._t("今天口述字數", "Words today")),
-            (stats["week"], self._t("本週口述字數", "Words this week")),
-            (stats["today"], self._t("今天少打字數", "Keystrokes saved today")),
+        metrics.pack(fill="x", pady=(0, 20))
+        for value, label, icon in [
+            (stats["today"], self._t("今天口述字數", "Words today"), "mic"),
+            (stats["week"], self._t("本週口述字數", "Words this week"), "text"),
+            (stats["today"], self._t("今天少打字數", "Keystrokes saved today"), "bolt"),
         ]:
             card = tk.Frame(metrics, bg=self.card, highlightbackground=self.border, highlightthickness=1)
             card.pack(side="left", fill="both", expand=True, padx=(0, 10))
-            tk.Label(card, text=f"{value:,}", bg=self.card, fg=self.fg,
-                     font=("Segoe UI", 22, "bold"), anchor="w").pack(fill="x", padx=17, pady=(14, 0))
+            stat_row = tk.Frame(card, bg=self.card)
+            stat_row.pack(fill="x", padx=17, pady=(14, 0))
+            self._metric_icon(stat_row, icon).pack(side="left", padx=(0, 11))
+            tk.Label(stat_row, text=f"{value:,}", bg=self.card, fg=self.fg,
+                     font=("Segoe UI", 22, "bold"), anchor="w").pack(side="left")
             tk.Label(card, text=label, bg=self.card, fg=self.muted,
-                     font=("Microsoft JhengHei UI", 10), anchor="w").pack(fill="x", padx=17, pady=(0, 14))
+                     font=("Microsoft JhengHei UI", 10), anchor="w").pack(fill="x", padx=17, pady=(1, 14))
         card = tk.Frame(self.content, bg=self.card, highlightbackground=self.border, highlightthickness=1)
         card.pack(fill="both", expand=True)
         transcript_header = tk.Frame(card, bg=self.card)
-        transcript_header.pack(fill="x", padx=20, pady=(18, 0))
+        transcript_header.pack(fill="x", padx=22, pady=(19, 0))
         tk.Label(transcript_header, text=self._t("最近一次辨識", "LATEST TRANSCRIPT"), bg=self.card,
                  fg=self.muted, anchor="w", font=("Microsoft JhengHei UI", 10, "bold")).pack(side="left")
         self.transcript_state = tk.Label(transcript_header, text=self._t("準備就緒", "Ready"), bg=self.card,
@@ -356,18 +380,19 @@ class App:
         self.transcript_state.pack(side="right")
         self.preview_label = tk.Label(card, textvariable=self.preview, bg=self.card, fg=self.fg,
                                       font=("Microsoft JhengHei UI", 16), wraplength=620,
-                                      justify="left", anchor="nw", padx=20, pady=11)
+                                      justify="left", anchor="nw", padx=22, pady=13)
         self.preview_label.pack(fill="x", pady=(3, 3))
         self.waveform_canvas = tk.Canvas(card, height=42, bg=self.card, highlightthickness=0, borderwidth=0)
-        self.waveform_canvas.pack(fill="x", padx=24, pady=(0, 8))
+        self.waveform_canvas.pack(fill="x", padx=26, pady=(0, 11))
         self._animate_home_waveform()
-        grammar_card = tk.Frame(card, bg=self.bg, highlightbackground=self.border, highlightthickness=1)
-        grammar_card.pack(fill="x", padx=20, pady=(2, 10))
-        grammar_header = tk.Frame(grammar_card, bg=self.bg)
+        grammar_bg = "#172126" if self.dark_theme else "#EEF4F1"
+        grammar_card = tk.Frame(card, bg=grammar_bg, highlightbackground=self.accent, highlightthickness=1)
+        grammar_card.pack(fill="x", padx=22, pady=(2, 12))
+        grammar_header = tk.Frame(grammar_card, bg=grammar_bg)
         grammar_header.pack(fill="x", padx=13, pady=(10, 5))
-        tk.Label(grammar_header, text=self._t("AI 文法校正", "AI GRAMMAR CORRECTION"), bg=self.bg,
+        tk.Label(grammar_header, text=self._t("✓  AI 文法校正", "✓  AI GRAMMAR CORRECTION"), bg=grammar_bg,
                  fg=self.accent, font=("Microsoft JhengHei UI", 10, "bold")).pack(side="left")
-        self.grammar_status_label = tk.Label(grammar_header, textvariable=self.grammar_status, bg=self.bg,
+        self.grammar_status_label = tk.Label(grammar_header, textvariable=self.grammar_status, bg=grammar_bg,
                                               fg=self.muted, font=("Microsoft JhengHei UI", 9, "bold"))
         self.grammar_status_label.pack(side="right")
         self._grammar_line(grammar_card, self._t("原始辨識", "Original"), self.raw_preview, self.muted)
@@ -379,12 +404,36 @@ class App:
             tk.Button(actions, text=label, command=command, bg=self.card, fg=self.accent,
                       relief="flat", padx=8, pady=6).pack(side="left", padx=(0, 8))
 
+    def _metric_icon(self, parent: tk.Frame, kind: str) -> tk.Canvas:
+        """Draw metric icons ourselves so they render consistently on every Windows font setup."""
+        background = "#244D43" if self.dark_theme else "#DCEFE7"
+        canvas = tk.Canvas(parent, width=44, height=44, bg=parent.cget("bg"),
+                           highlightthickness=0, borderwidth=0)
+        canvas.create_rectangle(0, 0, 44, 44, fill=background, outline=background)
+        if kind == "mic":
+            # A simple filled capsule plus stand reads as a microphone at small sizes.
+            canvas.create_oval(17, 8, 27, 18, fill=self.accent, outline=self.accent)
+            canvas.create_rectangle(17, 13, 27, 23, fill=self.accent, outline=self.accent)
+            canvas.create_oval(17, 18, 27, 28, fill=self.accent, outline=self.accent)
+            canvas.create_line(22, 29, 22, 35, fill=self.accent, width=2)
+            canvas.create_line(16, 36, 28, 36, fill=self.accent, width=2)
+        elif kind == "text":
+            canvas.create_rectangle(13, 10, 31, 34, outline=self.accent, width=2)
+            for y, length in [(16, 10), (22, 12), (28, 7)]:
+                canvas.create_line(17, y, 17 + length, y, fill=self.accent, width=2)
+        else:
+            canvas.create_polygon(24, 8, 14, 24, 21, 24, 18, 36, 31, 18, 24, 18,
+                                  fill=self.accent, outline=self.accent)
+        return canvas
+
     def _grammar_line(self, parent: tk.Frame, label: str, value: tk.StringVar, color: str) -> None:
-        row = tk.Frame(parent, bg=self.bg)
+        background = parent.cget("bg")
+        field_bg = "#202D31" if self.dark_theme else "#FFFFFF"
+        row = tk.Frame(parent, bg=background)
         row.pack(fill="x", padx=13, pady=3)
-        tk.Label(row, text=label, bg=self.bg, fg=self.muted, width=8, anchor="w",
+        tk.Label(row, text=label, bg=background, fg=self.muted, width=8, anchor="w",
                  font=("Microsoft JhengHei UI", 9)).pack(side="left")
-        tk.Label(row, textvariable=value, bg="#1A2227" if self.dark_theme else "#F0EFEB", fg=color,
+        tk.Label(row, textvariable=value, bg=field_bg, fg=color,
                  anchor="w", justify="left", padx=10, pady=5,
                  font=("Microsoft JhengHei UI", 10)).pack(side="left", fill="x", expand=True)
 
@@ -425,19 +474,115 @@ class App:
         tk.Label(self.content, text=title, bg=self.bg, fg=self.fg,
                  font=("Microsoft JhengHei UI", 23, "bold"), anchor="w").pack(fill="x", pady=(0, 18))
         rows = self.storage.recent_history(100) if is_history else self.storage.common_phrases(100)
+        if not is_history:
+            tk.Label(self.content, text=self._t("管理你的常用句；可新增、編輯、刪除或貼到原本游標位置。",
+                                                "Manage reusable phrases: add, edit, delete, or paste."),
+                     bg=self.bg, fg=self.muted, font=("Microsoft JhengHei UI", 10), anchor="w").pack(
+                         fill="x", pady=(0, 12)
+                     )
         box = tk.Listbox(self.content, bg=self.card, fg=self.fg, relief="flat",
-                         font=("Microsoft JhengHei UI", 12), selectbackground=self.accent)
+                         font=("Microsoft JhengHei UI", 12), selectbackground=self.accent,
+                         selectforeground="#102019", activestyle="none")
         box.pack(fill="both", expand=True)
         for row in rows:
-            box.insert("end", row["text"])
+            suffix = "" if is_history else self._t(f"   · 使用 {row['uses']} 次", f"   · Used {row['uses']}x")
+            box.insert("end", row["text"] + suffix)
+
+        editing_id: int | None = None
+
+        def selected_row() -> dict | None:
+            selected = box.curselection()
+            return rows[selected[0]] if selected else None
+
         def use_selected() -> None:
-            selection = box.curselection()
-            if selection:
+            row = selected_row()
+            if row:
                 self.root.clipboard_clear()
-                self.root.clipboard_append(rows[selection[0]]["text"])
+                self.root.clipboard_append(row["text"])
                 self.status.set(self._t("已複製所選文字", "Selected text copied"))
-        tk.Button(self.content, text=self._t("複製選取內容", "Copy selection"), command=use_selected,
-                  bg=self.accent, fg="white", relief="flat", padx=14, pady=8).pack(anchor="e", pady=12)
+
+        actions = tk.Frame(self.content, bg=self.bg)
+        actions.pack(fill="x", pady=12)
+        tk.Button(actions, text=self._t("複製選取內容", "Copy selection"), command=use_selected,
+                  bg=self.border, fg=self.fg, relief="flat", padx=14, pady=8).pack(side="left")
+
+        def paste_selected() -> None:
+            row = selected_row()
+            if not row:
+                return
+            self.root.clipboard_clear()
+            self.root.clipboard_append(row["text"])
+            focus_window(self.target_hwnd)
+            paste()
+            self.status.set(self._t("已貼到原本游標位置", "Pasted at the original cursor"))
+
+        if is_history:
+            tk.Button(actions, text=self._t("貼到游標位置", "Paste at cursor"), command=paste_selected,
+                      bg=self.accent, fg="#102019", relief="flat", padx=14, pady=8).pack(side="left", padx=8)
+            return
+
+        editor = tk.Frame(self.content, bg=self.card, highlightbackground=self.border, highlightthickness=1)
+        editor.pack(fill="x", pady=(0, 8))
+        tk.Label(editor, text=self._t("常用句內容", "Phrase"), bg=self.card, fg=self.muted,
+                 font=("Microsoft JhengHei UI", 10, "bold")).pack(anchor="w", padx=14, pady=(11, 4))
+        phrase_value = tk.StringVar()
+        entry = tk.Entry(editor, textvariable=phrase_value, bg="#10181C" if self.dark_theme else "#FFFFFF",
+                         fg=self.fg, insertbackground=self.fg, relief="flat",
+                         font=("Microsoft JhengHei UI", 11))
+        entry.pack(fill="x", padx=14, ipady=8)
+        editor_actions = tk.Frame(editor, bg=self.card)
+        editor_actions.pack(fill="x", padx=14, pady=12)
+        save_button = tk.Button(editor_actions, text=self._t("新增到字典", "Add to dictionary"),
+                                bg=self.accent, fg="#102019", relief="flat", padx=14, pady=8)
+        save_button.pack(side="left")
+
+        def refresh(message: str) -> None:
+            self._show_page("dictionary")
+            self.status.set(message)
+
+        def save_phrase() -> None:
+            nonlocal editing_id
+            text = phrase_value.get().strip()
+            if not text:
+                self.status.set(self._t("請先輸入常用句", "Enter a phrase first"))
+                return
+            try:
+                if editing_id is None:
+                    self.storage.add_phrase(text)
+                    refresh(self._t("已加入字典", "Added to dictionary"))
+                else:
+                    self.storage.update_phrase(editing_id, text)
+                    refresh(self._t("字典內容已更新", "Dictionary entry updated"))
+            except Exception:
+                self.status.set(self._t("這句內容已經在字典中", "This phrase is already in the dictionary"))
+
+        def edit_selected() -> None:
+            nonlocal editing_id
+            row = selected_row()
+            if not row:
+                self.status.set(self._t("請先選取一個常用句", "Select a phrase first"))
+                return
+            editing_id = int(row["id"])
+            phrase_value.set(row["text"])
+            save_button.configure(text=self._t("儲存修改", "Save changes"))
+            entry.focus_set()
+
+        def delete_selected() -> None:
+            row = selected_row()
+            if not row:
+                self.status.set(self._t("請先選取一個常用句", "Select a phrase first"))
+                return
+            if messagebox.askyesno(APP_NAME, self._t("要刪除這個字典內容嗎？", "Delete this dictionary entry?")):
+                self.storage.delete_phrase(int(row["id"]))
+                refresh(self._t("已刪除字典內容", "Dictionary entry deleted"))
+
+        save_button.configure(command=save_phrase)
+        tk.Button(editor_actions, text=self._t("編輯選取內容", "Edit selection"), command=edit_selected,
+                  bg=self.border, fg=self.fg, relief="flat", padx=14, pady=8).pack(side="left", padx=8)
+        tk.Button(editor_actions, text=self._t("刪除選取內容", "Delete selection"), command=delete_selected,
+                  bg="#9C4F52", fg="#FFFFFF", relief="flat", padx=14, pady=8).pack(side="left")
+        tk.Button(actions, text=self._t("貼到游標位置", "Paste at cursor"), command=paste_selected,
+                  bg=self.accent, fg="#102019", relief="flat", padx=14, pady=8).pack(side="right")
 
     def show_settings(self) -> None:
         self._show_page("settings")
@@ -573,11 +718,46 @@ class App:
             def callback(indata, frame_count, timing, status) -> None:
                 self.frames.append(indata.copy())
 
-            self.stream = sd.InputStream(
-                device=self.settings.microphone,
-                samplerate=SAMPLE_RATE, channels=1, dtype="int16", callback=callback
-            )
-            self.stream.start()
+            candidates: list[int] = []
+            if self.settings.microphone is not None:
+                candidates.append(self.settings.microphone)
+            else:
+                try:
+                    default_input = int(sd.default.device[0])
+                    if default_input >= 0:
+                        candidates.append(default_input)
+                except (IndexError, TypeError, ValueError):
+                    pass
+            try:
+                candidates.extend(
+                    index for index, device in enumerate(sd.query_devices())
+                    if device["max_input_channels"] > 0 and index not in candidates
+                )
+            except Exception:
+                pass
+            if not candidates:
+                raise RuntimeError("找不到可用的麥克風")
+
+            errors: list[str] = []
+            self.stream = None
+            for device in candidates:
+                stream = None
+                try:
+                    stream = sd.InputStream(
+                        device=device, samplerate=SAMPLE_RATE, channels=1, dtype="int16", callback=callback
+                    )
+                    stream.start()
+                    self.stream = stream
+                    break
+                except Exception as exc:
+                    errors.append(str(exc))
+                    if stream is not None:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
+            if self.stream is None:
+                raise RuntimeError(errors[-1] if errors else "找不到可開啟的麥克風")
         except Exception as exc:
             self._sound_error()
             messagebox.showerror(APP_NAME, f"無法開啟麥克風：\n{exc}")

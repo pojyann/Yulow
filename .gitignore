@@ -7,6 +7,7 @@ __pycache__/
 # Packaging output
 build/
 dist/
+dist-v*/
 outputs/
 work/
 *.spec

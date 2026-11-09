@@ -91,6 +91,30 @@ class Storage:
         )
         self.connection.commit()
 
+    def add_phrase(self, text: str) -> None:
+        """Add a user-managed dictionary phrase and keep it visible even before reuse."""
+        now = datetime.now().isoformat(timespec="seconds")
+        self.connection.execute(
+            """
+            INSERT INTO phrases(text, uses, favorite, updated_at) VALUES(?, 1, 1, ?)
+            ON CONFLICT(text) DO UPDATE SET favorite = 1, updated_at = excluded.updated_at
+            """,
+            (text, now),
+        )
+        self.connection.commit()
+
+    def update_phrase(self, item_id: int, text: str) -> None:
+        now = datetime.now().isoformat(timespec="seconds")
+        self.connection.execute(
+            "UPDATE phrases SET text = ?, favorite = 1, updated_at = ? WHERE id = ?",
+            (text, now, item_id),
+        )
+        self.connection.commit()
+
+    def delete_phrase(self, item_id: int) -> None:
+        self.connection.execute("DELETE FROM phrases WHERE id = ?", (item_id,))
+        self.connection.commit()
+
     def delete_history(self, item_id: int) -> None:
         self.connection.execute("DELETE FROM history WHERE id = ?", (item_id,))
         self.connection.commit()
